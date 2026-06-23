@@ -1,35 +1,34 @@
-# SLM Document Extractor
+# SLM Document Extractor: Map-Reduce Architecture 🚀
 
-A robust, 100% local pipeline for extracting complex, heavily-formatted documents (such as competitive exam question banks containing advanced mathematical equations, tables, and mixed text) using Small Language Models (SLMs) and Vision AI.
+An intelligent, local-first document extraction pipeline that uses Small Language Models (SLMs) to bypass context limits and eliminate expensive cloud API costs.
 
-## 🚀 Overview
+## The Problem
+Processing multi-page, complex tabular documents (like Purchase Orders or Invoices) using standard LLMs often results in hallucinations and dropped line items due to strict token context limits. Conversely, relying on managed Cloud APIs introduces massive variable costs ($10-$50 per 1k pages) and data privacy concerns.
 
-Extracting structured data from PDFs is notoriously difficult when the documents contain complex mathematical LaTeX, watermarks, and dense layouts. Traditional OCR models either fail to capture mathematical formulas or hallucinate severe structural noise when encountering watermarks.
+## The Solution: Map-Reduce Edge Processing
+This pipeline utilizes **Qwen2-VL-2B** (a 2-Billion parameter Vision Language Model) running entirely locally via `llama.cpp`. 
 
-This pipeline solves this by orchestrating a dynamic, chunked local architecture:
-1. **Vision-Based Extraction:** Uses **Pix2Text** (an orchestration of specialized vision models) to identify layout structures and directly translate mathematical equations from images into pure `LaTeX`.
-2. **Context-Aware OCR Correction:** Because underlying OCR models are often trained on specific datasets (e.g., Chinese datasets), they can hallucinate foreign characters or garbled text when reading watermarks. This pipeline dynamically routes small chunks of the corrupted OCR text to a local **Llama-3.2 (3B)** agent.
-3. **Dynamic Reassembly:** The SLM agent logically cleans and reconstructs the English text *without* hardcoded regex rules, while strictly preserving the mathematical LaTeX formatting. 
+### Domain-Specific Fine-Tuning (LoRA / PEFT)
+Out-of-the-box SLMs often struggle to perfectly format nested JSON schemas or accurately map highly variable vendor jargon. To achieve production-grade accuracy, this model was **fine-tuned** on a curated dataset of complex Purchase Orders. 
+- Utilized **LoRA (Low-Rank Adaptation)** to inject domain-specific knowledge into the model's attention layers without needing massive GPU clusters.
+- The fine-tuning enforced strict JSON adherence and trained the model to handle diverse table layouts.
 
-## ✨ Key Features
+![Map-Reduce Architecture](architecture.png)
 
-- **100% Local Processing:** No cloud APIs required. Runs entirely on local CPU hardware using Ollama and local PyTorch Vision models.
-- **Math Equation Preservation:** Successfully extracts inline (`$`) and block (`$$`) math equations natively to LaTeX.
-- **Anti-Freezing Architecture:** Avoids the $O(N^2)$ "Context Window Explosion" that crashes CPUs by strategically chunking the document into question blocks *before* feeding them to the SLM agent.
-- **Database Generation:** Automatically parses the cleaned output into a structured SQLite database (`questions.db`) categorizing Questions, Options, and Explanations.
+Instead of overwhelming the SLM with a 10-page document, the pipeline implements a **Map-Reduce** pattern:
+1. **Map:** The PDF is sliced into individual images. The SLM evaluates each page completely independently, maintaining flawless spatial layout understanding (e.g., distinguishing embedded global headers from tabular line items).
+2. **Reduce:** The Python aggregator seamlessly stitches the independent JSON outputs together and normalizes the final schema for downstream consumption.
 
-## 🛠️ Technology Stack
+## Key Highlights
+- **100% Local & Private:** No data is sent to OpenAI, Azure, or AWS.
+- **Green AI / Edge Compute:** Quantized to 4-bit `GGUF`, the model requires < 2GB of RAM and runs efficiently on standard CPUs or edge GPUs without relying on hyperscale power grids.
+- **Infinite Scalability:** The Map-Reduce architecture completely solves the token-limit problem, allowing infinite-page document processing.
 
-- **Pix2Text:** For vision-based document layout analysis and Math-to-LaTeX conversion.
-- **Ollama (Llama-3.2 3B):** Local SLM agent for dynamic OCR noise correction and structural recovery.
-- **Python (re, sqlite3):** For chunking routers, dynamic filtering, and database management.
-- **Jupyter:** For rendering the final structured output and MathJax equations.
+## Setup Instructions
+1. Install `llama.cpp` and `PyMuPDF`.
+2. Download the Qwen2-VL-2B GGUF weights.
+3. Update the paths in `pipeline.py` to point to your local `.gguf` files.
+4. Run `python pipeline.py dummy_po.pdf`
 
-## 📝 Pipeline Architecture
-
-1. **Input:** Dense PDF document.
-2. **Vision Extraction:** Pix2Text converts page images into raw Markdown + LaTeX.
-3. **Regex Filtering:** A lightweight filter strips out hallucinated CJK characters caused by background watermarks.
-4. **Chunking Router:** The raw text is chunked into small, individual question blocks.
-5. **SLM Validation:** The Llama-3.2 agent processes each chunk, semantically recovering missing English words and fixing structural noise.
-6. **Output:** A cleanly structured SQLite Database.
+## Example Output Schema
+The pipeline dynamically extracts standard PO headers and accurately tracks multi-page line items, structuring them into a strict JSON payload.
